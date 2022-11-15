@@ -32,6 +32,7 @@ CLOSE_TESTPLAN_URL = 'close_plan/{}'
 GET_TESTRUN_URL = 'get_run/{}'
 GET_TESTPLAN_URL = 'get_plan/{}'
 GET_TESTS_URL = 'get_tests/{}'
+VIEW_TESTRUN_URL = 'runs/view/{}'
 
 COMMENT_SIZE_LIMIT = 4000
 
@@ -220,6 +221,64 @@ class PyTestRailPlugin(object):
             defectids = item.get_closest_marker(TESTRAIL_DEFECTS_PREFIX).kwargs.get('defect_ids')
         if item.get_closest_marker(TESTRAIL_PREFIX):
             testcaseids = item.get_closest_marker(TESTRAIL_PREFIX).kwargs.get('ids')
+            if test_parametrize is not None:
+                # By default very strange behaviour for handling multiple tests ids
+                # is used - single result is generated (and thus sent to Testrail)
+                # for all ids. Seems like the only real case to specify several ids
+                # is test parametrization. Otherwise it's not clear why do we need to
+                # send the same result to several tests. So the following logic is
+                # intended to link specific parameter with appropriate test id from
+                # Testrail and allow to upload single result for a test.
+
+                # The following object should always present if condition above is
+                # True. Still we add default return value to 'next' and check it
+                # later.
+                parametrize_mark = next(
+                    filter(
+                        lambda mark: mark.name == 'parametrize', item.own_markers
+                    ), None
+                )
+
+                # Seems like 'args' tuple of parametrization Mark object have
+                # constant structure, so we assume that single list value contains
+                # all parameters.
+                if parametrize_mark is not None:
+                    params = next(
+                        filter(
+                            lambda arg: isinstance(arg, list), parametrize_mark.args
+                        ), []
+                    )
+
+                    tests_count = len(testcaseids)
+                    params_count = len(params)
+
+                    if params_count != tests_count and tests_count != 1:
+                        # Something is wrong and we don't know how to map results.
+                        print(
+                            'Got {} params and {} tests, publishing will be ignored!'.format(
+                                params_count, tests_count
+                            )
+                        )
+                        testcaseids = []
+                    else:
+                        if params:
+                            # Searching current parameter in the common list.
+                            try:
+                                current_index = params.index(
+                                    tuple(
+                                        param for param in test_parametrize.values()
+                                    )
+                                )
+                            except ValueError:
+                                # This should happen only if we specifiy one test id for several parameters.
+                                current_index = 0
+                                print(
+                                    'Failed to find index for {} parameter'.format(
+                                        test_parametrize
+                                    )
+                                )
+                            testcaseids = [testcaseids[current_index]]
+
             if rep.when == 'call' and testcaseids:
                 if defectids:
                     self.add_result(
@@ -388,9 +447,14 @@ class PyTestRailPlugin(object):
             print('[{}] Failed to create testrun: "{}"'.format(TESTRAIL_PREFIX, error))
         else:
             self.testrun_id = response['id']
-            print('[{}] New testrun created with name "{}" and ID={}'.format(TESTRAIL_PREFIX,
-                                                                             testrun_name,
-                                                                             self.testrun_id))
+            print(
+                '[{}] New testrun created with name "{}" and ID={}\n{}'.format(
+                    TESTRAIL_PREFIX, testrun_name, self.testrun_id,
+                    '{}{}'.format(
+                        self.client.base_url, VIEW_TESTRUN_URL.format(self.testrun_id)
+                    )
+                )
+            )
 
     def close_test_run(self, testrun_id):
         """
