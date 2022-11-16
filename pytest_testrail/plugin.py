@@ -239,7 +239,7 @@ class PyTestRailPlugin(object):
                     ), None
                 )
 
-                # Seems like 'args' tuple of parametrization Mark object have
+                # Seems like 'args' tuple of parametrization Mark object has
                 # constant structure, so we assume that single list value contains
                 # all parameters.
                 if parametrize_mark is not None:
