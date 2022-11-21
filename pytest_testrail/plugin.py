@@ -33,8 +33,17 @@ GET_TESTRUN_URL = 'get_run/{}'
 GET_TESTPLAN_URL = 'get_plan/{}'
 GET_TESTS_URL = 'get_tests/{}'
 VIEW_TESTRUN_URL = 'runs/view/{}'
+GET_CASE_URL = 'get_case/{}'
+UPDATE_CASE_URL = 'update_case/{}'
 
 COMMENT_SIZE_LIMIT = 4000
+
+
+class AutomationStatus:
+    NOT_AUTOMATED = 1
+    AUTOMATED = 2
+    CANNOT_BE_AUTOMATED = 3
+    TEMPORARY_BLOCKED = 4
 
 
 class DeprecatedTestDecorator(DeprecationWarning):
@@ -335,6 +344,9 @@ class PyTestRailPlugin(object):
         :param duration: Time it took to run just the test.
         """
         for test_id in test_ids:
+            # With new logic of ids parsing we will always get list with one id
+            # here. Preserving cycle not to break current logic, but this should
+            # be refactored.
             data = {
                 'case_id': test_id,
                 'status_id': status,
@@ -382,7 +394,10 @@ class PyTestRailPlugin(object):
         # Publish results
         data = {'results': []}
         for result in self.results:
-            entry = {'status_id': result['status_id'], 'case_id': result['case_id'], 'defects': result['defects']}
+            case_id = result['case_id']
+            # Updating automation status
+            self.set_automation_status(case_id)
+            entry = {'status_id': result['status_id'], 'case_id': case_id, 'defects': result['defects']}
             if self.version:
                 entry['version'] = self.version
             comment = result.get('comment', '')
@@ -419,6 +434,70 @@ class PyTestRailPlugin(object):
         error = self.client.get_error(response)
         if error:
             print('[{}] Info: Testcases not published for following reason: "{}"'.format(TESTRAIL_PREFIX, error))
+
+    def get_case(self, case_id):
+        """
+        Get case data.
+        """
+        response = self.client.send_get(
+            GET_CASE_URL.format(case_id),
+            cert_check=self.cert_check
+        )
+        error = self.client.get_error(response)
+        if error:
+            print(
+                '[{}] Failed to retrieve case {}: "{}"'.format(
+                    TESTRAIL_PREFIX, case_id, error
+                )
+            )
+            return {}
+
+        return response
+
+    def update_case(self, case_id, **kwargs):
+        """
+        Update case data.
+        """
+        response = self.client.send_post(
+            UPDATE_CASE_URL.format(case_id),
+            data=kwargs,
+            cert_check=self.cert_check
+        )
+        error = self.client.get_error(response)
+        if error:
+            print(
+                '[{}] Failed to update case {}: "{}"'.format(
+                    TESTRAIL_PREFIX, case_id, error
+                )
+            )
+
+    def set_automation_status(self, case_id):
+        """
+        Update automation status and publish warning if necessary.
+        """
+        status = self.get_case(case_id).get('custom_automation_status')
+        if status is not None:
+            if status == AutomationStatus.AUTOMATED:
+                print(
+                    'Case {} is already marked as automated'.format(case_id)
+                )
+            else:
+                if status in (
+                    AutomationStatus.CANNOT_BE_AUTOMATED,
+                    AutomationStatus.TEMPORARY_BLOCKED
+                ):
+                    print(
+                        'Warning! Check if case {} was marked as automated '
+                        'correctly.'.format(case_id)
+                    )
+                self.update_case(
+                    case_id, custom_automation_status=AutomationStatus.AUTOMATED
+                )
+        else:
+            print(
+                'Unable to detect automation status for case {}, '
+                'ignoring update'.format(case_id)
+            )
 
     def create_test_run(self, assign_user_id, project_id, suite_id, include_all,
                         testrun_name, tr_keys, milestone_id, description=''):
