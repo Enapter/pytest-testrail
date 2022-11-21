@@ -12,7 +12,7 @@ The results of the collected tests will be updated against the testplan/testrun 
 Installation
 ------------
 
-    pip install pytest-testrail
+    pip install git+https://github.com/Enapter/pytest-testrail.git@master#egg=pytest-testrail
 
 Configuration
 -------------

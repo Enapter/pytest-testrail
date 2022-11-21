@@ -12,7 +12,7 @@ Installation
 
 ::
 
-   pip install pytest-testrail
+   pip install git+https://github.com/Enapter/pytest-testrail.git@master#egg=pytest-testrail
 
 Configuration
 -------------
