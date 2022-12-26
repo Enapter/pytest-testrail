@@ -272,11 +272,11 @@ class PyTestRailPlugin(object):
                     else:
                         if params:
                             # Searching current parameter in the common list.
+                            # It may be either single value or tuple.
                             try:
+                                current_param = tuple(test_parametrize.values())
                                 current_index = params.index(
-                                    tuple(
-                                        param for param in test_parametrize.values()
-                                    )
+                                    current_param if len(current_param) > 1 else current_param[0]
                                 )
                             except ValueError:
                                 # This should happen only if we specifiy one test id for several parameters.
