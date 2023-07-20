@@ -278,15 +278,15 @@ class PyTestRailPlugin(object):
                                 current_index = params.index(
                                     current_param if len(current_param) > 1 else current_param[0]
                                 )
-                            except ValueError:
-                                # This should happen only if we specifiy one test id for several parameters.
-                                current_index = 0
+                                testcaseids = [testcaseids[current_index]]
+                            except IndexError:
+                                # This should happen only if we specified one test id for several parameters.
                                 print(
-                                    'Failed to find index for {} parameter'.format(
+                                    'Failed to find index for {} parameter (single paratmetrized case).'.format(
                                         test_parametrize
                                     )
                                 )
-                            testcaseids = [testcaseids[current_index]]
+                                testcaseids = [testcaseids[0]]
 
             if rep.when == 'call' and testcaseids:
                 if defectids:
@@ -373,7 +373,9 @@ class PyTestRailPlugin(object):
 
         # Comment sort by status_id due to issue with pytest-rerun failures,
         # for details refer to issue https://github.com/allankp/pytest-testrail/issues/100
-        # self.results.sort(key=itemgetter('status_id'))
+
+        # UPDATE: return sort by status.
+        self.results.sort(key=itemgetter('status_id'))
         self.results.sort(key=itemgetter('case_id'))
 
         # Manage case of "blocked" testcases
